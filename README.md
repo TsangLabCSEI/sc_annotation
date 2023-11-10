@@ -4,7 +4,9 @@
 1. Automate celltype annotations process; predict celltype labels with high accuracy.
 2. Remove technical variation across batches while preserving biological variation.
 
+<br/><br/>
 ----- Meeting Notes -----
+<br/><br/>
 
 ### 11/10/2023
 
