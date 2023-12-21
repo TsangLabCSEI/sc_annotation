@@ -75,3 +75,32 @@ Ao, Leon - conduct benchmark to combination of input types, models and data.
 	+ cluster stability
 	+ which resolution
 
+
+## 12/21/2023
+
+[Results description]
+
+1. Ao: tried RF_flat on sorted-cells dataset from MMoChi paper, within-dataset train-test split (p=0.6), accuracy ~ 0.94 for both true_expr & rank_expr as input
+2. Leon: tried RF_flat to predict from batch1d0 to batch2d0, accurarcy per celltype > 0.95 (except for NK cells ~ 0.67), take T mem subsets as a whole
+3. No explicit evidence that rank_expr performs better (in the simple sorted-cells dataset); RF_flat works pretty well for within-study cross-batch prediction
+
+[To-be-resolved]
+
+1. celltype_lable, feature_panel matching problems across studies
+2. be cautious about **overfitting** 
+3. training takes a long time
+
+[Next steps]
+
+--- before next meeting 
+
+1. Pipeline the model
+2. run MMoCHi method over covid-flu/acute-covid (design threshold)
+3. run RF_flat for more within-study cross-batch prediction
+4. run RF_flat for cross-study prediction (acute-covid -> covid-flu)
+
+--- longer term
+
+1. Incorporate **label\_transfer** from Seurat to RF model
+2. Address potential problems in over-fitting, training time, etc.
+
