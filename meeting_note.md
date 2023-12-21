@@ -104,3 +104,7 @@ Ao, Leon - conduct benchmark to combination of input types, models and data.
 1. Incorporate **label\_transfer** from Seurat to RF model
 2. Address potential problems in over-fitting, training time, etc.
 
+--- misc
+
+1. MMoCHi sometimes uses `gex_feature` to train classifier, under what circumstances are gex info helpful for distinguish immune celltypes
+2. Review the details of RF training, understand parameters and potential caveats
