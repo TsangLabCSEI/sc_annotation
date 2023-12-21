@@ -4,6 +4,7 @@ output: html_notebook
 ---
 
 
+#load libraries and data sets
 ```{r}
 library(Seurat)
 library(dplyr)
@@ -21,6 +22,7 @@ dataset.cflu<-readRDS("/gpfs/gibbs/pi/csei/Projects/CFLU/citeseq/COVID_Flu_CITE_
 ```
 
 
+#preprocessing and train test data definitions
 ```{r}
 #Train dataset
 data_test=as.data.frame(dataset.acovd[["CITE"]][,which((dataset.acovd$Batch=="B2") & (dataset.acovd$Timepoint=="T0"))])
@@ -64,9 +66,8 @@ common_labels<-intersect(label_test_II, celltypes)
 #data_test_II<-data_test_II[,which(label_test_II %in% common_labels)]
 ```
 
-
-```{r}
 #Define training procedure
+```{r}
 fitControl <- trainControl(method = "cv",
                            ## 10-fold CV...
                            number = 10,
@@ -77,23 +78,7 @@ fitControl <- trainControl(method = "cv",
 
 ```
 
-```{r}
-cd4.naive.markers<-c("PROT-CD4","PROT-CD45RA","PROT-CD45RO","PROT-CD95")
-cd8.naive.markers<-c("PROT-CD8","PROT-CD45RA","PROT-CD45RO","PROT-CD95")
-cd4.scm.markers<-c("PROT-CD4","PROT-CD45RA","PROT-CD45RO","PROT-CD95") #same as naive
-cd8.scm.markers<-c("PROT-CD8","PROT-CD45RA","PROT-CD45RO","PROT-CD95") #same as naive
-cd4.tm<-c("PROT-CD4","PROT-CD69","PROT-CD103")
-cd8.tm<-c("PROT-CD8","PROT-CD69","PROT-CD103")
-cd4.em<-c("PROT-CD4","PROT-CD45RO","PROT-CD27","PROT-CD28")
-cd8.em<-c("PROT-CD8","PROT-CD45RO","PROT-CD27","PROT-CD28")
-cd4.cm<-c("PROT-CD4","PROT-CD45RO","PROT-CD27","PROT-CD28") #same as em
-cd8.cm<-c("PROT-CD8","PROT-CD45RO","PROT-CD27","PROT-CD28") #same as em
-
-cd4.all<-unique(c(cd4.naive.markers,cd8.naive.markers,cd4.scm.markers,cd4.tm,cd4.cm,cd8.em,"CD3"))
-cd4.all<-as.vector(sapply(cd4.all, function(x){gsub("PROT-","",x)}))
-```
-
-
+#celltype training loop
 ```{r}
 auc_list <- list()
 auc_test <- list()
@@ -176,8 +161,9 @@ for (type in common_labels){ #all celltypes
   #print(auc_test_II[[type]])
 }
 
-
 ```
+
+#example plot of auc curve
 ```{r}
 perf <- performance(rocr_pred, "tpr", "fpr")
 plot(perf,avg="threshold",spread.estimate="boxplot")
