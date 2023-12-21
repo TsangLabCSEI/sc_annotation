@@ -1,0 +1,183 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(reshape2)
+library(caret)
+library(kernlab)
+library(doParallel)
+
+set.seed(999)
+options(stringsAsFactors = F)
+
+dataset.acovd<-readRDS("/gpfs/gibbs/pi/csei/Projects/ACOVD/citeseq/AcuteCovid_GSE161918_AllBatches_SeuratObj.rds")
+dataset.cflu<-readRDS("/gpfs/gibbs/pi/csei/Projects/CFLU/citeseq/COVID_Flu_CITE_Seurat_Object.rds")
+
+```
+
+
+```{r}
+#Train dataset
+data_test=as.data.frame(dataset.acovd[["CITE"]][,which((dataset.acovd$Batch=="B2") & (dataset.acovd$Timepoint=="T0"))])
+label_test=as.vector(dataset.acovd[,which((dataset.acovd$Batch=="B2") & (dataset.acovd$Timepoint=="T0"))]$WCTcoursecelltype)
+celltypes=unique(label_test)
+
+#Test dataset
+data_train=as.data.frame(dataset.acovd[["CITE"]][,which((dataset.acovd$Batch=="B1") )]) #& (dataset.acovd$Timepoint=="T0")
+label_train=as.vector(dataset.acovd[,which((dataset.acovd$Batch=="B1") )]$WCTcoursecelltype) #& (dataset.acovd$Timepoint=="T0")
+
+#Test II dataset
+data_test_II=as.data.frame(dataset.cflu[["CITE"]][,which((dataset.cflu$Batch=="Batch2") & (dataset.cflu$visit=="D0"))])
+label_test_II=as.vector(dataset.cflu[,which((dataset.cflu$Batch=="Batch2") & (dataset.cflu$visit=="D0"))]$cell.type)
+
+#reduce to common markers
+marker_names<-rownames(data_test_II)
+marker_names_new<-as.vector(sapply(marker_names, function(x){gsub("\\.1","",x)}))
+marker_names_new<-as.vector(sapply(marker_names_new, function(x){gsub("PROT-","",x)}))
+rownames(data_test_II)<-marker_names_new
+common_markers<-intersect(rownames(data_test_II), rownames(data_test))
+
+#data_train<-data_train[which(rownames(data_train) %in% common_markers),]
+#data_test<-data_test[which(rownames(data_test) %in% common_markers),]
+#data_test_II<-data_test_II[which(rownames(data_test_II) %in% common_markers),]
+
+#reduce to common labels
+label_test_II<-as.vector(sapply(label_test_II, function(x){gsub("CD4_EM","CD4_Mem",x)}))
+label_test_II<-as.vector(sapply(label_test_II, function(x){gsub("CD4_CM","CD4_Mem",x)}))
+label_test_II<-as.vector(sapply(label_test_II, function(x){gsub("CD8_EM","CD8_Mem",x)}))
+label_test_II<-as.vector(sapply(label_test_II, function(x){gsub("CD8_CM","CD8_Mem",x)}))
+label_test_II<-as.vector(sapply(label_test_II, function(x){gsub("CD8_TEMRA","CD8_Mem",x)}))
+label_test_II<-as.vector(sapply(label_test_II, function(x){gsub("CD8_TRM","CD8_Mem",x)}))
+label_test_II<-as.vector(sapply(label_test_II, function(x){gsub("Platelet","Platelets",x)}))
+common_labels<-intersect(label_test_II, celltypes)
+
+#label_train<-label_train[which(label_train %in% common_labels)]
+#data_train<-data_train[,which(label_train %in% common_labels)]
+#label_test<-label_test[which(label_test %in% common_labels)]
+#data_test<-data_test[,which(label_test %in% common_labels)]
+#label_test_II<-label_test_II[which(label_test_II %in% common_labels)]
+#data_test_II<-data_test_II[,which(label_test_II %in% common_labels)]
+```
+
+
+```{r}
+#Define training procedure
+fitControl <- trainControl(method = "cv",
+                           ## 10-fold CV...
+                           number = 10,
+                           classProbs = TRUE,
+                           ## repeated ten times
+                           #repeats = 10,
+                           summaryFunction = twoClassSummary)
+
+```
+
+```{r}
+cd4.naive.markers<-c("PROT-CD4","PROT-CD45RA","PROT-CD45RO","PROT-CD95")
+cd8.naive.markers<-c("PROT-CD8","PROT-CD45RA","PROT-CD45RO","PROT-CD95")
+cd4.scm.markers<-c("PROT-CD4","PROT-CD45RA","PROT-CD45RO","PROT-CD95") #same as naive
+cd8.scm.markers<-c("PROT-CD8","PROT-CD45RA","PROT-CD45RO","PROT-CD95") #same as naive
+cd4.tm<-c("PROT-CD4","PROT-CD69","PROT-CD103")
+cd8.tm<-c("PROT-CD8","PROT-CD69","PROT-CD103")
+cd4.em<-c("PROT-CD4","PROT-CD45RO","PROT-CD27","PROT-CD28")
+cd8.em<-c("PROT-CD8","PROT-CD45RO","PROT-CD27","PROT-CD28")
+cd4.cm<-c("PROT-CD4","PROT-CD45RO","PROT-CD27","PROT-CD28") #same as em
+cd8.cm<-c("PROT-CD8","PROT-CD45RO","PROT-CD27","PROT-CD28") #same as em
+
+cd4.all<-unique(c(cd4.naive.markers,cd8.naive.markers,cd4.scm.markers,cd4.tm,cd4.cm,cd8.em,"CD3"))
+cd4.all<-as.vector(sapply(cd4.all, function(x){gsub("PROT-","",x)}))
+```
+
+
+```{r}
+auc_list <- list()
+auc_test <- list()
+auc_test_II <- list()
+
+for (type in common_labels){ #all celltypes
+  print(type)
+
+  ###caret, kernlab packages Train random forrest
+  TrainData <- t(data_train)
+  param <- c(100) 
+  tunegrid <- expand.grid(.mtry=param) 
+  TrainClasses <- as.factor(as.character(as.numeric(label_train==type)))
+  TrainClasses <- sapply(TrainClasses,function(x) {gsub(x,pattern = "1", replacement = type)})
+  TrainClasses <- as.factor(as.vector(sapply(TrainClasses,function(x) {gsub(x,pattern = "0", replacement = "other")})))
+  
+  print("start training with cross validation...")
+  cl <- makePSOCKcluster(10)
+  registerDoParallel(cl)
+  
+  Training <- train(x=TrainData, y=TrainClasses, 
+                    method = "rf", 
+                    importance = TRUE,
+                    #preProc = c("center"),
+                    tuneGrid = tunegrid,
+                    trControl = fitControl, metric = "ROC")
+  
+  stopCluster(cl)
+  
+  auc_list[[type]]<-Training
+  print(Training)
+  #saveRDS(Training, file = paste0(type,'_rf_model.RData'))
+  
+  
+  
+  ### Class Prediction of Test Data 
+  print("start testing on the same data set ...")
+  
+  Test <- t(data_test)
+  
+  cl <- makePSOCKcluster(10)
+  registerDoParallel(cl)
+  
+  predictedClasses <- predict(Training, newdata=Test, type="prob")$other
+
+  stopCluster(cl)
+  
+  TClasses <- as.character(as.numeric(label_test==type))
+  TClasses <- sapply(TClasses,function(x) {gsub(x,pattern = "1", replacement = type)})
+  TClasses <- as.factor(as.vector(sapply(TClasses,function(x) {gsub(x,pattern = "0", replacement = "other")})))
+  
+  ### Calculate AUC for predicted classes (taking class labels as response vector)
+  rocr_pred <- prediction(predictedClasses, as.factor(TClasses))
+  auc <- performance(rocr_pred, "auc")
+  auc_test[[type]] <- unlist(slot(auc, "y.values"))
+  print(auc_test[[type]])
+
+  
+  
+  ### Class Prediction of Test Data II
+  #print("start testing on a different data set ...")
+
+  #Test <- t(data_test_II)
+  
+  #cl <- makePSOCKcluster(10)
+  #registerDoParallel(cl)
+  
+  #predictedClasses <- predict(Training, newdata=Test, type="prob")$other
+
+  #stopCluster(cl)
+  
+  #TClasses <- as.character(as.numeric(label_test_II==type))
+  #TClasses <- sapply(TClasses,function(x) {gsub(x,pattern = "1", replacement = type)})
+  #TClasses <- as.factor(as.vector(sapply(TClasses,function(x) {gsub(x,pattern = "0", replacement = "other")})))
+  
+  ### Calculate AUC for predicted classes (taking class labels as response vector)
+  #rocr_pred <- prediction(predictedClasses, as.factor(TClasses))
+  #auc <- performance(rocr_pred, "auc")
+  #auc_test_II[[type]] <- unlist(slot(auc, "y.values"))
+  #print(auc_test_II[[type]])
+}
+
+
+```
+```{r}
+plot(perf,avg="threshold",spread.estimate="boxplot")
+```
