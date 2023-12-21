@@ -179,5 +179,6 @@ for (type in common_labels){ #all celltypes
 
 ```
 ```{r}
+perf <- performance(rocr_pred, "tpr", "fpr")
 plot(perf,avg="threshold",spread.estimate="boxplot")
 ```
