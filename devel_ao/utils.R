@@ -3,7 +3,7 @@
 # Name: Ao Huang
 # Date: Jan 17 2024
 
-data_preprocess = function (seurat_obj, features, cell_label,
+data_preprocess = function (seurat_obj, features, cell_label='fine',
                             input_type = 'expr') {
     # Returns a cell-by-feature dataframe plus another column that contains
     # cell labels, ready for classifier training
@@ -13,7 +13,8 @@ data_preprocess = function (seurat_obj, features, cell_label,
     # 
     # Parameter features: a vector of feature names of type character
     # 
-    # Parameter cell_label: a vector of celltype labels of type character
+    # Parameter cell_label: specify the granularity of celltype annotation
+    # Preconditions: choose from 'fine' or 'coarse'
     # 
     # Parameter input_type: specifying the normalization method to data
     # Preconditions: choose from "expr" (dsb-normalized expr) or "rank"
@@ -30,8 +31,8 @@ data_preprocess = function (seurat_obj, features, cell_label,
     
     ## if requires rank
     if (input_type == 'rank') {
-        rank_matrix = t(apply(expr_matrix), 1, 
-                        function (x) {rank(x,ties.method="average")})
+        rank_matrix = t(apply(expr_matrix, 1, 
+                              function (x) {rank(x,ties.method="average")} ))
         
         # MinMax normalize each row  between 0 & 1
         # rank_matrix = t(apply(rank_matrix), 1,
@@ -41,7 +42,12 @@ data_preprocess = function (seurat_obj, features, cell_label,
     }
 
     ## add cell_label
-    expr_df = mutate(expr_df, cell_type = factor(cell_label))
+    if (cell_label == 'coarse') {
+        celltype = seurat_obj$coarse.cell.type
+    } else if (cell_label == 'fine') {
+        celltype = seurat_obj$cell.type
+    }
+    expr_df = mutate(expr_df, cell_type = factor(celltype))
 
     ## return data matrix
     return(expr_df)
